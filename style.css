@@ -1,0 +1,103 @@
+:root {
+  --green: #06c755;
+  --green-dark: #05a647;
+  --bg: #f4f6f8;
+  --card: #fff;
+  --text: #1f2933;
+  --muted: #6b7785;
+  --border: #e3e7eb;
+  --orange: #f59e0b;
+  --red: #e5484d;
+  --blue: #3b82f6;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 16px;
+  padding-bottom: 72px;
+}
+header {
+  background: var(--green);
+  color: #fff;
+  padding: 14px 16px;
+  font-size: 18px;
+  font-weight: 700;
+  position: sticky; top: 0; z-index: 5;
+  display: flex; align-items: center; gap: 8px;
+}
+header .back { background: none; border: 0; color: #fff; font-size: 22px; padding: 0 6px 0 0; cursor: pointer; }
+main { padding: 12px 16px; }
+.tabs {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  display: flex; background: #fff; border-top: 1px solid var(--border); z-index: 5;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.tabs button {
+  flex: 1; border: 0; background: none; padding: 12px 0; font-size: 15px; color: var(--muted); cursor: pointer;
+}
+.tabs button.active { color: var(--green); font-weight: 700; }
+
+.card {
+  background: var(--card); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.06);
+}
+.card h3 { margin: 0 0 6px; font-size: 17px; }
+.card.clickable { cursor: pointer; }
+.meta { color: var(--muted); font-size: 14px; line-height: 1.7; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.quota { font-size: 14px; }
+.quota b { font-size: 16px; }
+.badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 13px; color: #fff; white-space: nowrap; }
+.b-green { background: var(--green); }
+.b-orange { background: var(--orange); }
+.b-red { background: var(--red); }
+.b-gray { background: #9aa5b1; }
+.b-blue { background: var(--blue); }
+.desc { white-space: pre-wrap; line-height: 1.7; margin-top: 10px; }
+
+.btn {
+  display: block; width: 100%; border: 0; border-radius: 10px; padding: 13px; font-size: 16px; font-weight: 700;
+  background: var(--green); color: #fff; cursor: pointer; margin-top: 10px;
+}
+.btn:disabled { background: #b8c2cc; cursor: not-allowed; }
+.btn.outline { background: #fff; color: var(--red); border: 1px solid var(--red); }
+.btn.small { display: inline-block; width: auto; padding: 8px 14px; font-size: 14px; margin-top: 0; }
+
+label { display: block; font-size: 14px; color: var(--muted); margin: 12px 0 4px; }
+input, textarea {
+  width: 100%; padding: 11px 12px; font-size: 16px; border: 1px solid var(--border); border-radius: 8px; background: #fff;
+  font-family: inherit;
+}
+input:focus, textarea:focus { outline: 2px solid var(--green); border-color: transparent; }
+
+.empty { text-align: center; color: var(--muted); padding: 48px 0; }
+.loading { text-align: center; color: var(--muted); padding: 48px 0; }
+.spinner {
+  width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--green); border-radius: 50%;
+  margin: 0 auto 10px; animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.modal {
+  position: fixed; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center;
+  z-index: 20; padding: 16px;
+}
+.modal .box { background: #fff; border-radius: 16px; padding: 20px; width: 100%; max-width: 340px; text-align: center; }
+.modal .box h3 { margin: 0 0 4px; }
+#qr { display: flex; justify-content: center; margin: 16px 0; }
+#qr img, #qr canvas { max-width: 100%; }
+
+.toast {
+  position: fixed; left: 50%; bottom: 88px; transform: translateX(-50%);
+  background: rgba(0,0,0,.82); color: #fff; padding: 10px 18px; border-radius: 999px; font-size: 14px;
+  z-index: 30; max-width: calc(100% - 32px); text-align: center;
+}
+.result { text-align: center; padding: 24px 8px; }
+.result .icon { font-size: 56px; }
+.result.ok { color: var(--green-dark); }
+.result.warn { color: var(--orange); }
+.result.err { color: var(--red); }
+.hidden { display: none !important; }

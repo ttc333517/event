@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>報到管理</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body style="padding-bottom:16px">
+  <header><span>報到管理</span></header>
+  <main>
+    <div id="view"><div class="loading"><div class="spinner"></div>載入中…</div></div>
+  </main>
+  <div class="toast hidden" id="toast"></div>
+
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script src="config.js"></script>
+  <script>
+    const CFG = window.APP_CONFIG;
+    const view = document.getElementById('view');
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    async function api(action, payload = {}) {
+      const body = Object.assign({ action, idToken: liff.getIDToken() }, payload);
+      const json = await (await fetch(CFG.API_URL, { method: 'POST', body: JSON.stringify(body) })).json();
+      if (!json.ok) {
+        if (json.code === 'TOKEN_EXPIRED') { liff.logout(); liff.login({ redirectUri: location.href }); }
+        throw new Error(json.error);
+      }
+      return json.data;
+    }
+
+    function renderHome(resultHtml = '') {
+      view.innerHTML = `
+        ${resultHtml}
+        <div class="card">
+          <button class="btn" id="scanBtn">📷 掃描報到 QR Code</button>
+          <label for="manual">或手動輸入報到碼</label>
+          <input id="manual" placeholder="32 碼報到碼">
+          <button class="btn" id="manualBtn" style="background:#4b5563">送出</button>
+        </div>`;
+      document.getElementById('scanBtn').onclick = scan;
+      document.getElementById('manualBtn').onclick = () => doCheckin(document.getElementById('manual').value);
+    }
+
+    async function scan() {
+      try {
+        const r = await liff.scanCodeV2();
+        if (r && r.value) await doCheckin(r.value);
+      } catch (e) {
+        renderHome(`<div class="card result err"><div class="icon">⚠️</div>無法開啟掃描：${esc(e.message)}<div class="meta">請確認 LIFF 已開啟 Scan QR 並以 Full 尺寸開啟</div></div>`);
+      }
+    }
+
+    async function doCheckin(token) {
+      token = String(token || '').trim();
+      if (!token) return;
+      view.innerHTML = '<div class="loading"><div class="spinner"></div>報到中…</div>';
+      try {
+        const r = await api('checkin', { token });
+        const info = `<div class="meta">${esc(r.eventName)}<br>電話 ${esc(r.phone)}<br>報到時間 ${esc(r.checkinTime)}</div>`;
+        renderHome(r.already
+          ? `<div class="card result warn"><div class="icon">⚠️</div><h3>${esc(r.name)} 已報到過</h3>${info}</div>`
+          : `<div class="card result ok"><div class="icon">✅</div><h3>${esc(r.name)} 報到成功</h3>${info}</div>`);
+      } catch (e) {
+        renderHome(`<div class="card result err"><div class="icon">❌</div><h3>${esc(e.message)}</h3></div>`);
+      }
+    }
+
+    (async () => {
+      try {
+        await liff.init({ liffId: CFG.LIFF_ID });
+        if (!liff.isLoggedIn()) return liff.login({ redirectUri: location.href });
+        const me = await api('whoami');
+        if (!me.isAdmin) {
+          view.innerHTML = `<div class="card"><h3>尚未取得管理權限</h3>
+            <div class="meta">請將下列 LINE userId 提供給系統管理員，加入 GAS 指令碼屬性 ADMIN_USER_IDS：</div>
+            <input readonly value="${esc(me.userId)}" onclick="this.select()"></div>`;
+          return;
+        }
+        renderHome();
+      } catch (e) {
+        view.innerHTML = `<div class="empty">${esc(e.message)}</div>`;
+      }
+    })();
+  </script>
+</body>
+</html>

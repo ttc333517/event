@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>活動報名</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <button class="back hidden" id="backBtn" aria-label="返回">‹</button>
+    <span id="pageTitle">活動報名</span>
+  </header>
+
+  <main id="view">
+    <div class="loading"><div class="spinner"></div>載入中…</div>
+  </main>
+
+  <nav class="tabs">
+    <button data-tab="events" class="active">📅 活動列表</button>
+    <button data-tab="my">🎫 我的報名</button>
+  </nav>
+
+  <!-- 報到 QR Code -->
+  <div class="modal hidden" id="qrModal">
+    <div class="box">
+      <h3 id="qrTitle"></h3>
+      <div class="meta" id="qrMeta"></div>
+      <div id="qr"></div>
+      <div class="meta">請於報到處出示此 QR Code</div>
+      <button class="btn" id="qrClose">關閉</button>
+    </div>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
