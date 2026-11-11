@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>活動報到</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body { padding-bottom: 24px; }
+    .bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .bar select { flex: 1; min-width: 180px; padding: 11px 12px; font-size: 16px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+    .stat { font-size: 15px; color: var(--muted); }
+    .stat b { font-size: 26px; color: var(--green-dark); }
+    .scanbox { display: flex; gap: 8px; }
+    .scanbox input { flex: 1; font-family: monospace; }
+    #reader { width: 100%; max-width: 420px; margin: 10px auto 0; border-radius: 12px; overflow: hidden; }
+    #banner { border-radius: 12px; padding: 18px 16px; margin-bottom: 12px; text-align: center; color: #fff; }
+    #banner h2 { margin: 0 0 4px; font-size: 24px; }
+    #banner .sub { font-size: 15px; opacity: .95; }
+    .ok { background: var(--green); }
+    .warn { background: var(--orange); }
+    .err { background: var(--red); }
+    .roster-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .roster-item:last-child { border-bottom: 0; }
+    .roster-item .who { min-width: 0; }
+    .roster-item .who b { display: block; }
+    .roster-item .who span { font-size: 13px; color: var(--muted); }
+    .tag-done { color: var(--green-dark); font-size: 14px; white-space: nowrap; }
+    .seg { display: flex; gap: 6px; margin: 8px 0; }
+    .seg button { flex: 1; border: 1px solid var(--border); background: #fff; border-radius: 8px; padding: 8px; font-size: 14px; cursor: pointer; }
+    .seg button.active { background: var(--green); color: #fff; border-color: var(--green); }
+    .hint { font-size: 13px; color: var(--muted); margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <header><span>活動報到</span><span style="flex:1"></span>
+    <button class="back hidden" id="logoutBtn" style="font-size:14px">登出</button>
+  </header>
+  <main>
+    <!-- 登入 -->
+    <div class="card" id="loginView">
+      <h3>工作人員登入</h3>
+      <form id="loginForm">
+        <label for="pw">報到密碼</label>
+        <input id="pw" type="password" autocomplete="current-password" required>
+        <button class="btn" type="submit">登入</button>
+      </form>
+    </div>
+
+    <!-- 報到 -->
+    <div id="mainView" class="hidden">
+      <div class="card">
+        <div class="bar">
+          <select id="eventSel" aria-label="選擇活動"></select>
+          <div class="stat">已報到 <b id="cntChecked">0</b> / <span id="cntTotal">0</span></div>
+        </div>
+      </div>
+
+      <div id="banner" class="hidden"></div>
+
+      <div class="card">
+        <h3>掃描報到</h3>
+        <div class="scanbox">
+          <input id="scanInput" placeholder="掃描槍：點這裡後直接掃" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <button class="btn small" id="scanSubmit" type="button">送出</button>
+        </div>
+        <div class="hint">掃描槍掃完會自動送出；若沒反應，請把輸入法切成英文。</div>
+        <button class="btn" id="camBtn" type="button">📷 開啟鏡頭掃描</button>
+        <div id="reader"></div>
+      </div>
+
+      <div class="card">
+        <h3>名單 <span class="meta" id="waitInfo"></span></h3>
+        <input id="search" placeholder="搜尋姓名 / 電話" autocomplete="off">
+        <div class="seg">
+          <button data-f="todo" class="active">未報到</button>
+          <button data-f="done">已報到</button>
+          <button data-f="all">全部</button>
+        </div>
+        <div id="roster"><div class="empty">請選擇活動</div></div>
+      </div>
+    </div>
+  </main>
+  <div class="toast hidden" id="toast"></div>
+
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <script src="config.js"></script>
+  <script>
+  (function () {
+    const CFG = window.APP_CONFIG;
+    const $ = (s) => document.querySelector(s);
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const S = { pw: '', eventId: null, roster: [], filter: 'todo', busy: false, recent: {}, cam: null, timer: null };
+    const finePointer = window.matchMedia && matchMedia('(pointer: fine)').matches; // 電腦/有實體鍵盤
+
+    function ssGet(k) { try { return sessionStorage.getItem(k) || ''; } catch (e) { return ''; } }
+    function ssSet(k, v) { try { v ? sessionStorage.setItem(k, v) : sessionStorage.removeItem(k); } catch (e) {} }
+    function toast(m) { const t = $('#toast'); t.textContent = m; t.classList.remove('hidden'); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.add('hidden'), 2500); }
+
+    async function api(action, payload) {
+      const body = Object.assign({ action, password: S.pw }, payload || {});
+      const res = await fetch(CFG.API_URL, { method: 'POST', body: JSON.stringify(body) });
+      const j = await res.json();
+      if (!j.ok) {
+        if (j.code === 'BAD_PASSWORD' && S.eventId !== null) logout();
+        const e = new Error(j.error || '發生錯誤'); e.code = j.code; throw e;
+      }
+      return j.data;
+    }
+
+    // 提示音：成功高音一聲，失敗低音兩聲
+    let actx = null;
+    function beep(ok) {
+      try {
+        actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+        const seq = ok ? [[880, 0, .15]] : [[300, 0, .18], [300, .25, .18]];
+        seq.forEach(([f, at, d]) => {
+          const o = actx.createOscillator(), g = actx.createGain();
+          o.frequency.value = f; o.connect(g); g.connect(actx.destination);
+          g.gain.value = .2; o.start(actx.currentTime + at); o.stop(actx.currentTime + at + d);
+        });
+        if (navigator.vibrate) navigator.vibrate(ok ? 80 : [80, 80, 80]);
+      } catch (e) {}
+    }
+
+    function banner(kind, title, sub) {
+      const b = $('#banner');
+      b.className = kind;
+      b.innerHTML = `<h2>${esc(title)}</h2>${sub ? `<div class="sub">${esc(sub)}</div>` : ''}`;
+    }
+
+    /* ---------- 登入 ---------- */
+    async function login(pw) {
+      S.pw = pw;
+      const events = await api('staffLogin');
+      ssSet('staff_pw', pw);
+      $('#loginView').classList.add('hidden');
+      $('#mainView').classList.remove('hidden');
+      $('#logoutBtn').classList.remove('hidden');
+      const sel = $('#eventSel');
+      sel.innerHTML = '<option value="">— 請選擇活動 —</option>' +
+        events.map((e) => `<option value="${e.id}">${esc(e.time.slice(0, 16))}　${esc(e.name)}</option>`).join('');
+      const last = ssGet('staff_event');
+      if (last && events.some((e) => String(e.id) === last)) { sel.value = last; selectEvent(last); }
+    }
+
+    function logout() {
+      stopCam();
+      clearInterval(S.timer);
+      ssSet('staff_pw', ''); S.pw = ''; S.eventId = null;
+      $('#mainView').classList.add('hidden');
+      $('#loginView').classList.remove('hidden');
+      $('#logoutBtn').classList.add('hidden');
+      $('#pw').value = '';
+    }
+
+    $('#loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = e.target.querySelector('button');
+      btn.disabled = true; btn.textContent = '登入中…';
+      try { await login($('#pw').value); } catch (err) { toast(err.message); }
+      btn.disabled = false; btn.textContent = '登入';
+    });
+    $('#logoutBtn').addEventListener('click', logout);
+
+    /* ---------- 活動與名單 ---------- */
+    function selectEvent(v) {
+      S.eventId = v === '' ? null : Number(v);
+      ssSet('staff_event', v);
+      $('#banner').classList.add('hidden');
+      clearInterval(S.timer);
+      if (S.eventId === null) { $('#roster').innerHTML = '<div class="empty">請選擇活動</div>'; return; }
+      loadRoster();
+      S.timer = setInterval(loadRoster, 30000); // 多台裝置同時報到時，定期同步
+      focusScan();
+    }
+    $('#eventSel').addEventListener('change', (e) => selectEvent(e.target.value));
+
+    async function loadRoster() {
+      if (S.eventId === null) return;
+      try {
+        const r = await api('staffRoster', { eventId: S.eventId });
+        S.roster = r.list;
+        $('#cntChecked').textContent = r.checked;
+        $('#cntTotal').textContent = r.total;
+        $('#waitInfo').textContent = r.waiting ? `（另有候補 ${r.waiting} 人）` : '';
+        renderRoster();
+      } catch (e) { toast(e.message); }
+    }
+
+    function renderRoster() {
+      const q = $('#search').value.trim().toLowerCase();
+      let list = S.roster;
+      if (S.filter === 'todo') list = list.filter((x) => !x.checked);
+      if (S.filter === 'done') list = list.filter((x) => x.checked);
+      if (q) list = list.filter((x) => x.name.toLowerCase().includes(q) || x.phone.includes(q.replace(/\D/g, '') || '\u0000'));
+      if (!list.length) { $('#roster').innerHTML = '<div class="empty">沒有符合的資料</div>'; return; }
+      $('#roster').innerHTML = list.map((x) => `
+        <div class="roster-item">
+          <div class="who"><b>${esc(x.name)}</b><span>${esc(x.phone)}${x.note ? '｜' + esc(x.note) : ''}</span></div>
+          ${x.checked
+            ? `<span class="tag-done">✔ ${esc(x.checkinTime.slice(11, 16))}</span>`
+            : `<button class="btn small" data-reg="${x.regId}">報到</button>`}
+        </div>`).join('');
+    }
+    $('#search').addEventListener('input', renderRoster);
+    document.querySelectorAll('.seg button').forEach((b) => b.addEventListener('click', () => {
+      document.querySelectorAll('.seg button').forEach((x) => x.classList.toggle('active', x === b));
+      S.filter = b.dataset.f; renderRoster();
+    }));
+    $('#roster').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-reg]');
+      if (!b) return;
+      const p = S.roster.find((x) => String(x.regId) === b.dataset.reg);
+      if (p && confirm(`確定幫「${p.name}」手動報到？`)) checkin({ regId: p.regId });
+    });
+
+    /* ---------- 報到 ---------- */
+    async function checkin(payload) {
+      if (S.eventId === null) { toast('請先選擇活動'); return; }
+      if (S.busy) return;
+      S.busy = true;
+      banner('warn', '報到中…', '');
+      try {
+        const r = await api('staffCheckin', Object.assign({ eventId: S.eventId }, payload));
+        if (r.already) { banner('warn', `⚠️ ${r.name} 已報到過`, `報到時間 ${r.checkinTime}`); beep(false); }
+        else { banner('ok', `✅ ${r.name} 報到成功`, r.phone); beep(true); }
+        loadRoster();
+      } catch (e) {
+        banner('err', '❌ ' + e.message, ''); beep(false);
+      } finally {
+        S.busy = false;
+        focusScan();
+      }
+    }
+
+    function handleCode(raw) {
+      const token = String(raw || '').trim().toLowerCase();
+      if (!token) return;
+      const now = Date.now();
+      if (S.recent[token] && now - S.recent[token] < 4000) return; // 鏡頭連續讀到同一張，4 秒內忽略
+      S.recent[token] = now;
+      checkin({ token });
+    }
+
+    // 掃描槍：本質上是鍵盤輸入，掃完會送出 Enter
+    const scanInput = $('#scanInput');
+    scanInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); handleCode(scanInput.value); scanInput.value = ''; }
+    });
+    $('#scanSubmit').addEventListener('click', () => { handleCode(scanInput.value); scanInput.value = ''; });
+    function focusScan() { if (finePointer && document.activeElement !== $('#search')) scanInput.focus(); }
+
+    // 手機鏡頭
+    async function startCam() {
+      if (!window.Html5Qrcode) { toast('掃描元件載入失敗，請重新整理'); return; }
+      try {
+        S.cam = new Html5Qrcode('reader');
+        await S.cam.start({ facingMode: 'environment' }, { fps: 10, qrbox: { width: 240, height: 240 } },
+          (text) => handleCode(text), () => {});
+        $('#camBtn').textContent = '⏹ 關閉鏡頭';
+      } catch (e) {
+        S.cam = null;
+        toast('無法開啟鏡頭：請允許相機權限，並用 Safari / Chrome 開啟此頁');
+      }
+    }
+    async function stopCam() {
+      if (S.cam) { try { await S.cam.stop(); } catch (e) {} S.cam = null; }
+      $('#camBtn').textContent = '📷 開啟鏡頭掃描';
+    }
+    $('#camBtn').addEventListener('click', () => (S.cam ? stopCam() : startCam()));
+
+    // 自動登入（同一分頁重新整理時）
+    const saved = ssGet('staff_pw');
+    if (saved) login(saved).catch(() => logout());
+  })();
+  </script>
+</body>
+</html>
